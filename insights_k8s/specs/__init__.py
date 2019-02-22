@@ -14,9 +14,10 @@ from insights.core.serde import deserializer, serializer
 
 
 class KubeOutputProvider(ContentProvider):
-    def __init__(self, client, name, client_kwargs):
+    def __init__(self, client, **client_kwargs):
         super(KubeOutputProvider, self).__init__()
-        self.cmd = name
+        name = "%s/%s" % (client_kwargs["api_version"], client_kwargs["kind"])
+        self.cmd = name.split("/")
         self.relative_path = name if name.endswith(".yaml") else name + ".yaml"
         self.root = "/"
         self.client_kwargs = client_kwargs
@@ -33,8 +34,9 @@ class KubeOutputProvider(ContentProvider):
 
 @serializer(KubeOutputProvider)
 def serialize_kube_output(obj, root):
-    rel = os.path.join("insights_commands", mangle_command(obj.cmd))
+    rel = os.path.join("k8s", *obj.cmd)
     dst = os.path.join(root, rel)
+    fs.ensure_path(os.path.dirname(dst))
     obj.write(dst)
     return {
         "cmd": obj.cmd,
@@ -74,7 +76,6 @@ class KubeClient(object):
 class kube_command(object):
     def __init__(self, kind, api_version="v1", **kwargs):
         # encode group into the api_version string if necessary
-        self.name = "_".join([api_version, kind]).replace("/", "_")
         self.client_kwargs = kwargs
         self.client_kwargs["kind"] = kind
         self.client_kwargs["api_version"] = api_version
@@ -83,9 +84,21 @@ class kube_command(object):
 
     def __call__(self, broker):
         client = broker[KubeClient]
-        return KubeOutputProvider(client, self.name, self.client_kwargs)
+        return KubeOutputProvider(client, **self.client_kwargs)
 
 
 class KubeSpecs(SpecSet):
     ns_info = kube_command(kind="Namespace")
     nodes = kube_command(kind="Node")
+    crds = kube_command(api_version="apiextensions.k8s.io/v1beta1", kind="CustomResourceDefinition")
+
+    @datasource(crds, KubeClient)
+    def crs(broker):
+        client = broker[KubeClient]
+        cr_list = []
+        for crd in yaml.safe_load(broker[KubeSpecs.crds].content)["items"]:
+            group = crd["spec"]["group"]
+            version = crd["spec"]["version"]
+            kind = crd["spec"]["names"]["kind"]
+            cr_list.append(KubeOutputProvider(client, api_version="%s/%s" % (group, version), kind=kind))
+        return cr_list

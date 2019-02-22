@@ -4,6 +4,7 @@ from setuptools import setup, find_packages
 runtime = set([
     "insights-core",
     "openshift",
+    "wheel",
 ])
 
 setup(
