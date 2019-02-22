@@ -1,4 +1,3 @@
-#!/usr/bin/env python3.6
 import os
 import yaml
 
@@ -8,31 +7,23 @@ from openshift.dynamic import DynamicClient
 
 from insights.core.context import ExecutionContext
 from insights.core.plugins import component
-from insights import rule, make_pass
+from insights import datasource
 from insights.util import fs
-from insights.core.spec_factory import ContentProvider, mangle_command, SerializedRawOutputProvider
+from insights.core.spec_factory import ContentProvider, mangle_command, SerializedRawOutputProvider, SpecSet
 from insights.core.serde import deserializer, serializer
 
 
-CONTENT = """
-Namespaces:
-{% for k, stuff in namespaces.items() %}
-    {{ k }}
-    {{ stuff }}
-{%- endfor %}
-""".strip()
-
-
 class KubeOutputProvider(ContentProvider):
-    def __init__(self, content, name):
+    def __init__(self, client, name, client_kwargs):
         super(KubeOutputProvider, self).__init__()
         self.cmd = name
         self.relative_path = name if name.endswith(".yaml") else name + ".yaml"
-        self._content = content
         self.root = "/"
+        self.client_kwargs = client_kwargs
+        self.k8s = client.k8s
 
     def load(self):
-        return self._content
+        return yaml.dump(self.k8s.resources.get(**self.client_kwargs).get().to_dict())
 
     def write(self, dst):
         fs.ensure_path(os.path.dirname(dst))
@@ -72,39 +63,29 @@ class KubeClient(object):
         if cfg:
             k8s_client = config.new_client_from_config(cfg)
         else:
-            # TODO not sure about this bit
-            # TODO this is a mess, looks like self-signed certs will not verify properly in python
             config.load_incluster_config()  # makes a singleton config behind the scenes
             k8cfg = Configuration()  # gets a copy from what was populated in the line above
+            # NOTE this is required due to https://github.com/openshift/origin/issues/22125
             k8cfg.verify_ssl = False
             k8s_client = ApiClient(configuration=k8cfg)  # this should use the singleton produced above
-        self.client = DynamicClient(k8s_client)  # stole this from config.new_client_from_config
+        self.k8s = DynamicClient(k8s_client)  # stole this from config.new_client_from_config
 
 
-class kube_command(component):
-    requires = [KubeClient]
+class kube_command(object):
+    def __init__(self, kind, api_version="v1", **kwargs):
+        # encode group into the api_version string if necessary
+        self.name = "_".join([api_version, kind]).replace("/", "_")
+        self.client_kwargs = kwargs
+        self.client_kwargs["kind"] = kind
+        self.client_kwargs["api_version"] = api_version
+        self.__name__ = self.__class__.__name__
+        datasource(KubeClient)(self)
+
+    def __call__(self, broker):
+        client = broker[KubeClient]
+        return KubeOutputProvider(client, self.name, self.client_kwargs)
 
 
-@kube_command()
-def get_node_names(k8s):
-    val = k8s.client.resources.get(api_version="v1", kind="Node").get()
-    return KubeOutputProvider(yaml.dump([n["metadata"]["name"] for n in val.to_dict()["items"]]), "node_names")
-
-
-@kube_command()
-def get_ns_info(k8s):
-    val = k8s.client.resources.get(api_version="v1", kind="Namespace").get().to_dict()
-    return KubeOutputProvider(yaml.dump(val), "namespaces")
-
-
-@rule(get_ns_info)
-def report(nss):
-    doc = yaml.safe_load(nss.content)
-    return make_pass("K8S_NODES", namespaces=doc)
-
-
-if __name__ == "__main__":
-    from insights.collect import collect
-    with open("/usr/share/manifest.yaml") as f:
-        doc = yaml.safe_load(f)
-    print(collect(doc, compress=True))
+class KubeSpecs(SpecSet):
+    ns_info = kube_command(kind="Namespace")
+    nodes = kube_command(kind="Node")

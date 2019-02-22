@@ -2,43 +2,41 @@
 # version is for the format of this file, not its contents.
 version: 0
 
-context:
-    class: gather.KubeContext
-    args:
-        root: /
-        timeout: 30
+client:
+    context:
+        class: insights_k8s.specs.KubeContext
+        args:
+            timeout: 10 # timeout in seconds for commands. Doesn't apply to files.
+            root: /
 
-# disable everything by default
-# defaults to false if not specified.
-default_component_enabled: false
+    # commands and files to ignore
+    blacklist:
+        files: []
+        commands: []
+        patterns: []
+        keywords: []
 
-# commands and files to ignore
-blacklist:
-    files: []
-    commands: []
-    patterns: []
-    keywords: []
+    # Can be a list of dictionaries with name/enabled fields or a list of strings
+    # where the string is the name and enabled is assumed to be true. Matching is
+    # by prefix, and later entries override previous ones. Persistence for a
+    # component is disabled by default.
+    persist:
+        - name: insights_k8s.specs.KubeSpecs
+          enabled: true
+plugins:
+    # disable everything by default
+    # defaults to false if not specified.
+    default_component_enabled: false
 
-# packages and modules to load
-packages:
-    - gather
+    # packages and modules to load
+    packages:
+        - insights_k8s
 
-# Can be a list of dictionaries with name/enabled fields or a list of strings
-# where the string is the name and enabled is assumed to be true. Matching is
-# by prefix, and later entries override previous ones. Persistence for a
-# component is disabled by default.
-persist:
-    - name: gather.get_node_names
-      enabled: true
-
-    - name: gather.get_ns_info
-      enabled: true
-
-# configuration of loaded components. names are prefixes, so any component with
-# a fully qualified name that starts with a key will get the associated
-# configuration applied. Can specify timeout, which will apply to command
-# datasources. Can specify metadata, which must be a dictionary and will be
-# merged with the components' default metadata.
-configs:
-    - name: gather
-      enabled: true
+    # configuration of loaded components. names are prefixes, so any component with
+    # a fully qualified name that starts with a key will get the associated
+    # configuration applied. Can specify timeout, which will apply to command
+    # datasources. Can specify metadata, which must be a dictionary and will be
+    # merged with the components' default metadata.
+    configs:
+        - name: insights_k8s
+          enabled: true
