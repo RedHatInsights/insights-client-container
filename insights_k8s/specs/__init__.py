@@ -6,51 +6,50 @@ from kubernetes.client import ApiClient, Configuration
 from openshift.dynamic import DynamicClient
 
 from insights.core.context import ExecutionContext
-from insights.core.plugins import component
-from insights import datasource
-from insights.util import fs
-from insights.core.spec_factory import ContentProvider, mangle_command, SerializedRawOutputProvider, SpecSet
+from insights.core.plugins import component, datasource
 from insights.core.serde import deserializer, serializer
+from insights.core.spec_factory import ContentProvider, SerializedRawOutputProvider, SpecSet
+from insights.util import fs
 
 
 class KubeOutputProvider(ContentProvider):
     def __init__(self, client, **client_kwargs):
         super(KubeOutputProvider, self).__init__()
         name = "%s/%s" % (client_kwargs["api_version"], client_kwargs["kind"])
-        self.cmd = name.split("/")
-        self.relative_path = name if name.endswith(".yaml") else name + ".yaml"
+        self.gvk = name.split("/")
+        self.relative_path = name
         self.root = "/"
         self.client_kwargs = client_kwargs
         self.k8s = client.k8s
 
     def load(self):
-        return yaml.dump(self.k8s.resources.get(**self.client_kwargs).get().to_dict())
+        doc = self.k8s.resources.get(**self.client_kwargs).get().to_dict()
+        return yaml.dump(doc, default_flow_style=False)
 
     def write(self, dst):
         fs.ensure_path(os.path.dirname(dst))
         with open(dst, "w") as f:
             f.write(self.content)
 
+        # we're done with it if we're writing it down.
+        # reset _content so we don't build up memory
+        self.loaded = False
+        self._content = None
+
 
 @serializer(KubeOutputProvider)
 def serialize_kube_output(obj, root):
-    rel = os.path.join("k8s", *obj.cmd)
+    rel = os.path.join("k8s", *obj.gvk)
     dst = os.path.join(root, rel)
     fs.ensure_path(os.path.dirname(dst))
     obj.write(dst)
-    return {
-        "cmd": obj.cmd,
-        "args": obj.args,
-        "relative_path": rel
-    }
+    return { "relative_path": rel }
 
 
 @deserializer(KubeOutputProvider)
 def deserialize_kube_output(_type, data, root):
     rel = data["relative_path"]
     res = SerializedRawOutputProvider(rel, root)
-    res.cmd = data["cmd"]
-    res.args = data["args"]
     return res
 
 
@@ -73,7 +72,7 @@ class KubeClient(object):
         self.k8s = DynamicClient(k8s_client)  # stole this from config.new_client_from_config
 
 
-class kube_command(object):
+class kube_resource(object):
     def __init__(self, kind, api_version="v1", **kwargs):
         # encode group into the api_version string if necessary
         self.client_kwargs = kwargs
@@ -88,9 +87,9 @@ class kube_command(object):
 
 
 class KubeSpecs(SpecSet):
-    ns_info = kube_command(kind="Namespace")
-    nodes = kube_command(kind="Node")
-    crds = kube_command(api_version="apiextensions.k8s.io/v1beta1", kind="CustomResourceDefinition")
+    ns_info = kube_resource(kind="Namespace")
+    nodes = kube_resource(kind="Node")
+    crds = kube_resource(kind="CustomResourceDefinition", api_version="apiextensions.k8s.io/v1beta1")
 
     @datasource(crds, KubeClient)
     def crs(broker):
