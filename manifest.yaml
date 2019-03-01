@@ -4,7 +4,7 @@ version: 0
 
 client:
     context:
-        class: insights_k8s.specs.KubeContext
+        class: insights.specs.openshift.OpenshiftContext
         args:
             timeout: 10 # timeout in seconds for commands. Doesn't apply to files.
             root: /
@@ -21,7 +21,7 @@ client:
     # by prefix, and later entries override previous ones. Persistence for a
     # component is disabled by default.
     persist:
-        - name: insights_k8s.specs.KubeSpecs
+        - name: insights.specs.openshift
           enabled: true
 plugins:
     # disable everything by default
@@ -30,7 +30,7 @@ plugins:
 
     # packages and modules to load
     packages:
-        - insights_k8s
+        - insights.specs.openshift
 
     # configuration of loaded components. names are prefixes, so any component with
     # a fully qualified name that starts with a key will get the associated
@@ -38,5 +38,5 @@ plugins:
     # datasources. Can specify metadata, which must be a dictionary and will be
     # merged with the components' default metadata.
     configs:
-        - name: insights_k8s
+        - name: insights.specs.openshift
           enabled: true
