@@ -10,3 +10,4 @@ RUN python3.6 -m pip install /src
 
 COPY manifest.yaml /usr/share/manifest.yaml
 COPY collect.sh /collect.sh
+COPY facts.py /facts.py
