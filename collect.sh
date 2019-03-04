@@ -2,10 +2,8 @@
 
 # TODO manifest
 # TODO CLOUDSERVICES url 
-# TODO netrc as mounted configmap or secret
 # TODO add _special_ content type
-
-# get egg
+NETRC=/tmp/netrc/netrc
 EGG_URL=https://api.access.redhat.com/r/insights/v1/static/core/insights-core.egg
 EGG_DST=/tmp/insights-core.egg
 
