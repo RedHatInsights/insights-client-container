@@ -11,8 +11,7 @@ ctx = OpenshiftContext()
 broker[OpenshiftContext] = ctx
 b = dr.run(OpenshiftSpecs.openshift_namespaces, broker)
 doc = yaml.safe_load(b[OpenshiftSpecs.openshift_namespaces].content)
-for o in doc["items"]:
-    if o["metadata"]["name"] == "kube-system":
-        print(json.dumps({"insights_id": o["metadata"]["uid"]}))
-        sys.exit(0)
-sys.exit(1)
+fact_dict = {
+    "insights_id": next(o["metadata"]["uid"] for o in doc["items"] if o["metadata"]["name"] == "kube-system")
+}
+print(json.dumps(fact_dict))
