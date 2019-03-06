@@ -1,7 +1,5 @@
-import yaml
-
-from insights import rule, make_pass
-from insights.specs.openshift.default import OpenshiftSpecs
+import json
+from insights import rule, make_pass, specs
 
 
 CONTENT = """
@@ -13,7 +11,7 @@ Namespaces:
 """.strip()
 
 
-@rule(OpenshiftSpecs.openshift_namespaces)
+@rule(specs.Openshift.namespaces)
 def report(nss):
-    doc = yaml.safe_load(nss.content)
-    return make_pass("K8S_NODES", namespaces=doc)
+    doc = json.loads(nss.content)
+    return make_pass("DEMO", namespaces=doc)
